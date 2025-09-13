@@ -27,7 +27,7 @@ class ShiftWindow:
         self.x_com_active = False
         
     def check_x_com_status(self):
-        """Check if x.com is open in the frontmost browser"""
+        """Check if x.com is open in the frontmost browser (periodic background check)"""
         if platform.system() == "Darwin":
             # First check if a browser with x.com is the frontmost application
             is_frontmost, browser = self.browser_detector.is_browser_frontmost_with_x_com()
@@ -44,14 +44,20 @@ class ShiftWindow:
                     self.x_com_active = False
         return self.x_com_active
     
+    def check_x_com_frontmost_now(self):
+        """Immediate check if x.com is in the frontmost browser (for shift key press)"""
+        if platform.system() == "Darwin":
+            is_frontmost, browser = self.browser_detector.is_browser_frontmost_with_x_com()
+            return is_frontmost
+        return False
+    
     def create_window_main_thread(self):
         """Create and position the small window in bottom right corner on main thread"""
         # Create the main window
         window = tk.Tk()
-        window.title("Shift Window")
+        window.title("Telepathy")
         window.overrideredirect(True)  # Remove window decorations
         window.attributes('-topmost', True)  # Keep on top
-        window.configure(bg='#2c3e50')
         
         # Set window size
         width = 200
@@ -68,33 +74,24 @@ class ShiftWindow:
         # Set window geometry
         window.geometry(f"{width}x{height}+{x}+{y}")
         
-        # Add some content to the window
-        frame = tk.Frame(window, bg='#2c3e50')
-        frame.pack(expand=True, fill='both', padx=10, pady=10)
-        
-        # Modify the label text based on x.com status
-        if self.x_com_active:
-            label_text = "Shift Key\n+ X.com Frontmost!"
-            bg_color = '#1DA1F2'  # Twitter blue
-        else:
-            label_text = "Shift Key\nDetected!"
-            bg_color = '#2c3e50'
-            
+        # Configure window with simple background
+        bg_color = '#2c3e50'  # Dark background
         window.configure(bg=bg_color)
-        frame = tk.Frame(window, bg=bg_color)
-        frame.pack(expand=True)
         
+        # Create a simple frame for the content
+        frame = tk.Frame(window, bg=bg_color)
+        frame.pack(expand=True, fill='both')
+        
+        # Add simple text label
         label = tk.Label(
-            frame, 
-            text=label_text, 
-            font=('Arial', 12, 'bold'),
+            frame,
+            text="Telepathy enabled.", 
+            font=('Arial', 14, 'normal'),
             fg='white',
             bg=bg_color,
             justify='center'
         )
         label.pack(expand=True)
-        
-        # Don't start timer here - it will be started when window is created
         
         # Initially hide the window (will be shown when needed)
         window.withdraw()
@@ -181,10 +178,16 @@ class ShiftWindow:
             key_name = str(key)
 
         if ('shift' in key_name) and not self.shift_pressed:
-            print("🎯 Shift key detected! Creating window...")
+            print("🎯 Shift key detected! Checking x.com frontmost status...")
             self.shift_pressed = True
-            # Send event to main thread via queue
-            self.event_queue.put("create_window")
+            
+            # Check if x.com is in frontmost browser before showing window
+            if self.check_x_com_frontmost_now():
+                print("✅ X.com is frontmost! Creating window...")
+                # Send event to main thread via queue
+                self.event_queue.put("create_window")
+            else:
+                print("❌ X.com is not frontmost. Window not shown.")
     
     def on_shift_release(self, key):
         """Handle Shift key release"""
@@ -202,7 +205,10 @@ class ShiftWindow:
         print("\n" + "=" * 50)
         print("🎯 Shift Window Monitor started!")
         print("=" * 50)
-        print("Hold down the Shift key to open the window.")
+        print("Hold down the Shift key when x.com is frontmost to show the window.")
+        print("Window will only appear when both conditions are met:")
+        print("  1. Shift key is pressed")
+        print("  2. X.com is open in the frontmost browser")
         print("Press Ctrl+C to exit.")
         print("=" * 50)
         
