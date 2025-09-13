@@ -1,140 +1,20 @@
 #!/usr/bin/env python3
 """
-A Python script that opens a small window in the bottom right corner
-when the Shift key is held down, and closes it after 2 seconds.
+Shift window module for creating and managing the popup window.
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
 import threading
 import time
 import queue
 from pynput import keyboard
-import sys
-import os
 import platform
-import subprocess
-import psutil  # pip install psutil
+from browser_detector import BrowserDetector
 
-class BrowserDetector:
-    def __init__(self):
-        self.system = platform.system()
-        
-    def is_x_com_open_mac(self):
-        """Check if x.com is open in any browser on macOS"""
-        browsers = {
-            'Safari': '''
-                tell application "Safari"
-                    if it is running then
-                        set tabList to every tab of every window
-                        repeat with aTab in tabList
-                            if URL of aTab contains "x.com" or URL of aTab contains "twitter.com" then
-                                return "true"
-                            end if
-                        end repeat
-                    end if
-                end tell
-                return "false"
-            ''',
-            'Google Chrome': '''
-                tell application "Google Chrome"
-                    if it is running then
-                        repeat with w in windows
-                            repeat with t in tabs of w
-                                try
-                                    set tabURL to URL of t
-                                    if tabURL contains "x.com" or tabURL contains "twitter.com" then
-                                        return "true"
-                                    end if
-                                end try
-                            end repeat
-                        end repeat
-                    end if
-                end tell
-                return "false"
-            ''',
-            'Arc': '''
-                tell application "Arc"
-                    if it is running then
-                        set tabList to every tab of every window
-                        repeat with aTab in tabList
-                            if URL of aTab contains "x.com" or URL of aTab contains "twitter.com" then
-                                return "true"
-                            end if
-                        end repeat
-                    end if
-                end tell
-                return "false"
-            '''
-        }
-        
-        for browser_name, script in browsers.items():
-            try:
-                result = subprocess.run(
-                    ['osascript', '-e', script],
-                    capture_output=True,
-                    text=True,
-                    timeout=2
-                )
-                if result.stdout.strip() == "true":
-                    return True, browser_name
-            except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
-                continue
-                
-        return False, None
-    
-    def get_active_window_title_mac(self):
-        """Get the title of the currently active window on macOS"""
-        script = '''
-            tell application "System Events"
-                set frontApp to name of first application process whose frontmost is true
-                tell process frontApp
-                    if exists (window 1) then
-                        return name of window 1
-                    else
-                        return ""
-                    end if
-                end tell
-            end tell
-        '''
-        try:
-            result = subprocess.run(
-                ['osascript', '-e', script],
-                capture_output=True,
-                text=True,
-                timeout=1
-            )
-            return result.stdout.strip()
-        except:
-            return ""
-    
-    def is_browser_active_with_x(self):
-        """Check if the active window is a browser with x.com"""
-        if self.system == "Darwin":
-            title = self.get_active_window_title_mac()
-            # X.com usually shows "X" or specific page titles in the window title
-            return "x.com" in title.lower() or " / X" in title or "(@" in title
-        return False
-    
-    def check_browser_processes(self):
-        """Check if browser processes are running"""
-        browser_processes = [
-            'Safari', 'Google Chrome', 'firefox', 'Microsoft Edge',
-            'Arc', 'Brave Browser', 'Opera', 'Vivaldi'
-        ]
-        
-        running_browsers = []
-        for proc in psutil.process_iter(['pid', 'name']):
-            try:
-                process_name = proc.info['name']
-                if any(browser.lower() in process_name.lower() for browser in browser_processes):
-                    running_browsers.append(process_name)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
-                
-        return running_browsers
 
 class ShiftWindow:
+    """Manages the popup window that appears when Shift is pressed"""
+    
     def __init__(self):
         self.window = None
         self.shift_pressed = False
@@ -395,77 +275,3 @@ class ShiftWindow:
             self.running = False
             if self.window:
                 self.close_window()
-
-def check_mac_permissions():
-    """Check if running on Mac and test if permissions are already granted"""
-    if platform.system() == "Darwin":  # macOS
-        print("🍎 macOS detected - checking accessibility permissions...")
-        
-        # Test if we can actually monitor keyboard input
-        try:
-            # Try to create a keyboard listener to test permissions
-            test_listener = keyboard.Listener(on_press=lambda x: None)
-            test_listener.start()
-            test_listener.stop()
-            print("✅ Accessibility permissions are already granted!")
-            return True
-        except Exception as e:
-            print(f"Permission test error: {e}")
-            print("❌ Accessibility permissions not granted or not working.")
-            print("=" * 60)
-            print("This script requires Accessibility permissions to monitor keyboard input.")
-            print()
-            print("To grant permissions:")
-            print("1. Go to System Preferences > Security & Privacy > Privacy")
-            print("2. Select 'Accessibility' from the left sidebar")
-            print("3. Click the lock icon and enter your password")
-            print("4. Add your Terminal app (or Python environment) to the list")
-            print("5. Make sure it's checked/enabled")
-            print()
-            print("If you don't grant these permissions, the script won't work.")
-            print("=" * 60)
-            
-            # Show a GUI dialog as well
-            try:
-                root = tk.Tk()
-                root.withdraw()  # Hide the main window
-                
-                result = messagebox.askokcancel(
-                    "macOS Permissions Required",
-                    "This script needs Accessibility permissions to monitor keyboard input.\n\n"
-                    "Please go to:\n"
-                    "System Preferences > Security & Privacy > Privacy > Accessibility\n\n"
-                    "Add your Terminal/Python app and enable it.\n\n"
-                    "Click OK to continue or Cancel to exit."
-                )
-                root.destroy()
-                
-                if not result:
-                    print("Permission setup cancelled. Exiting...")
-                    sys.exit(0)
-            except:
-                pass  # If GUI fails, continue with text prompt
-            return False
-    return True
-
-def main():
-    """Main function"""
-    # Check if required packages are installed
-    try:
-        import pynput
-    except ImportError:
-        print("Error: pynput package is required but not installed.")
-        print("Please install it using: pip install pynput")
-        sys.exit(1)
-    
-    # Check for Mac and show permission prompt
-    if not check_mac_permissions():
-        print("Please grant accessibility permissions and try again.")
-        return
-    
-    # Create and start the shift window monitor
-    shift_window = ShiftWindow()
-    shift_window.start_monitoring()
-
-if __name__ == "__main__":
-    main()
