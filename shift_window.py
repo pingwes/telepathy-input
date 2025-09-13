@@ -22,6 +22,7 @@ class ShiftWindow:
         self.running = True
         self.event_queue = queue.Queue()
         self.window_visible = False
+        self.window_created = False  # Track if window has been created
         
     def create_window_main_thread(self):
         """Create and position the small window in bottom right corner on main thread"""
@@ -63,7 +64,10 @@ class ShiftWindow:
         
         # Don't start timer here - it will be started when window is created
         
-        # Show the window and bring it to front
+        # Initially hide the window (will be shown when needed)
+        window.withdraw()
+        
+        # Now show the window and bring it to front
         window.deiconify()
         window.lift()
         window.attributes('-topmost', True)  # Keep on top of other windows
@@ -80,8 +84,19 @@ class ShiftWindow:
         self.window_timer.start()
     
     def schedule_window_close(self):
-        """Schedule window close on main thread"""
-        self.event_queue.put("close_window")
+        """Schedule window hide on main thread"""
+        self.event_queue.put("hide_window")
+    
+    def hide_window(self):
+        """Hide the window without destroying it"""
+        if self.window and self.window_visible:
+            try:
+                self.window.withdraw()  # Hide the window
+                self.window_visible = False
+                print("Window hidden")
+            except tk.TclError:
+                pass  # Window might already be destroyed
+        self.window_timer = None
     
     def close_window(self):
         """Close the window completely"""
@@ -91,30 +106,39 @@ class ShiftWindow:
             except tk.TclError:
                 pass  # Window might already be destroyed
             self.window = None
+            self.window_created = False
+            self.window_visible = False
         self.window_timer = None
     
     def show_window(self):
         """Show the window with proper dimensions and position"""
-        if self.window:
-            # Restore window to proper size and position
-            width = 200
-            height = 80
-            
-            # Get screen dimensions
-            screen_width = self.window.winfo_screenwidth()
-            screen_height = self.window.winfo_screenheight()
-            
-            # Calculate position for bottom right corner
-            x = screen_width - width - 10  # 10px margin from right edge
-            y = screen_height - height - 10  # 10px margin from bottom edge
-            
-            # Set window geometry
-            self.window.geometry(f"{width}x{height}+{x}+{y}")
-            self.window.attributes('-topmost', True)  # Keep on top
-            self.window.deiconify()  # Show the window
-            self.window.lift()
-            self.window.focus_force()
-            self.window_visible = True
+        if self.window and not self.window_visible:
+            try:
+                # Restore window to proper size and position
+                width = 200
+                height = 80
+                
+                # Get screen dimensions
+                screen_width = self.window.winfo_screenwidth()
+                screen_height = self.window.winfo_screenheight()
+                
+                # Calculate position for bottom right corner
+                x = screen_width - width - 10  # 10px margin from right edge
+                y = screen_height - height - 10  # 10px margin from bottom edge
+                
+                # Set window geometry
+                self.window.geometry(f"{width}x{height}+{x}+{y}")
+                self.window.attributes('-topmost', True)  # Keep on top
+                self.window.deiconify()  # Show the window
+                self.window.lift()
+                self.window.focus_force()
+                self.window_visible = True
+                print("Window shown")
+            except tk.TclError:
+                # Window might be destroyed, recreate it
+                self.window = None
+                self.window_created = False
+                self.window_visible = False
     
     def on_shift_press(self, key):
         """Handle Shift key press"""
@@ -175,17 +199,23 @@ class ShiftWindow:
                 try:
                     event = self.event_queue.get_nowait()
                     if event == "create_window":
-                        if self.window is None:
+                        if not self.window_created:
                             print("Creating window on main thread...")
                             self.window = self.create_window_main_thread()
                             self.window_visible = True
+                            self.window_created = True
                             # Start timer only when window is first created
                             self.start_timer()
-                        else:
-                            print("Window already exists, resetting timer...")
-                            self.window.deiconify() # Make sure it's visible
-                            self.window_visible = True
+                        elif not self.window_visible:
+                            print("Showing existing window...")
+                            self.show_window()
                             self.start_timer()
+                        else:
+                            print("Window already visible, resetting timer...")
+                            self.start_timer()
+                    elif event == "hide_window":
+                        print("Hiding window on main thread...")
+                        self.hide_window()
                     elif event == "close_window":
                         print("Closing window on main thread...")
                         self.close_window()
