@@ -27,14 +27,21 @@ class ShiftWindow:
         self.x_com_active = False
         
     def check_x_com_status(self):
-        """Check if x.com is open in any browser"""
+        """Check if x.com is open in the frontmost browser"""
         if platform.system() == "Darwin":
-            is_open, browser = self.browser_detector.is_x_com_open_mac()
-            if is_open:
-                print(f"✅ x.com detected in {browser}")
+            # First check if a browser with x.com is the frontmost application
+            is_frontmost, browser = self.browser_detector.is_browser_frontmost_with_x_com()
+            if is_frontmost:
+                print(f"✅ x.com detected in frontmost {browser}")
                 self.x_com_active = True
             else:
-                self.x_com_active = False
+                # Fallback: check if x.com is open in any browser (even if not frontmost)
+                is_open, browser = self.browser_detector.is_x_com_open_mac()
+                if is_open:
+                    print(f"⚠️  x.com detected in {browser} (not frontmost)")
+                    self.x_com_active = False  # Set to False since it's not frontmost
+                else:
+                    self.x_com_active = False
         return self.x_com_active
     
     def create_window_main_thread(self):
@@ -67,7 +74,7 @@ class ShiftWindow:
         
         # Modify the label text based on x.com status
         if self.x_com_active:
-            label_text = "Shift Key\n+ X.com Active!"
+            label_text = "Shift Key\n+ X.com Frontmost!"
             bg_color = '#1DA1F2'  # Twitter blue
         else:
             label_text = "Shift Key\nDetected!"
